@@ -8,6 +8,8 @@ import android.util.Log;
 import android.view.Surface;
 import android.opengl.GLES11Ext;
 
+import com.example.flamvr.globals.StreamDataInterface;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
@@ -16,7 +18,7 @@ import java.nio.ShortBuffer;
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
-public class OpenGLRenderer implements GLSurfaceView.Renderer {
+public class OpenGLRenderer implements GLSurfaceView.Renderer, StreamDataInterface.VideoInfoStream {
     OpenGLShader GLShader;
     private long startTime;
     public OpenGLRenderer(Context ctx){
@@ -26,13 +28,16 @@ public class OpenGLRenderer implements GLSurfaceView.Renderer {
     private static final String TAG = OpenGLRenderer.class.getSimpleName();
     static final int BYTES_PER_FLOAT = 4;
     static final int BYTES_PER_SHORT = 2;
-    static final int FLOATS_PER_VERTEX = 3;
-    static final float edge = 0.9f;
+    static final int FLOATS_PER_VERTEX = 5;
+    static float edgeX = 1.0f;
+    static float edgeY = 1.0f;
+    static float screenAspect = 1.0f;
+    static float videoAspect = 1.0f;
     float[] fvVerticesData = new float[]{
-            edge, edge, 0.0f,
-            edge, -edge, 0.0f,
-            -edge, -edge, 0.0f,
-            -edge, edge, 0.0f
+            edgeX, edgeY, 0.0f, 1.0f, 0.0f,
+            edgeX, -edgeY, 0.0f, 1.0f, 1.0f,
+            -edgeX, -edgeY, 0.0f, 0.0f, 1.0f,
+            -edgeX, edgeY, 0.0f, 0.0f, 0.0f,
     };
     short[] svIndexData = new short[]{
             0, 1, 2,
@@ -47,6 +52,9 @@ public class OpenGLRenderer implements GLSurfaceView.Renderer {
     private OnSurfaceReadyCallback surfaceReadyCallback;
     private final float[] transformMatrix = new float[16];
     private int transformMatrixHandle;
+    private boolean changeAspect = false;
+    static int glPosition;
+    static int glTexCoord;
     public interface OnSurfaceReadyCallback {
         void onSurfaceReady(Surface surface);
     }
@@ -82,18 +90,22 @@ public class OpenGLRenderer implements GLSurfaceView.Renderer {
 
         //bind the program and upload vertex data
         GLES31.glUseProgram(glProgram);
-        int glPosition = GLES31.glGetAttribLocation(glProgram, "aPosition");
+        glPosition = GLES31.glGetAttribLocation(glProgram, "aPosition");
+        glTexCoord = GLES31.glGetAttribLocation(glProgram, "aTexCoord");
         textureHandle = GLES31.glGetUniformLocation(glProgram, "uTexture");
         transformMatrixHandle = GLES31.glGetUniformLocation(glProgram, "uTransform");
 
         GLES31.glUniform1i(textureHandle, 0); // bind texture unit 0
 
         // gen VAO
-        int[] tmp = new int[2];
+        int[] tmp = new int[1];
         GLES31.glGenVertexArrays(1, tmp, 0);
         glVAO = tmp[0];
-
+        updateVertexArray();
+    }
+    private void updateVertexArray(){
         //gen VBO
+        int[] tmp = new int[2];
         GLES31.glGenBuffers(2, tmp, 0);
         int glVBO = tmp[0];
         int glEBO = tmp[1];
@@ -108,9 +120,10 @@ public class OpenGLRenderer implements GLSurfaceView.Renderer {
         GLES31.glBufferData(GLES31.GL_ELEMENT_ARRAY_BUFFER,svIndexData.length*BYTES_PER_SHORT, convertToShortBuffer(svIndexData), GLES31.GL_STATIC_DRAW);
 
         GLES31.glEnableVertexAttribArray(glPosition);
-        GLES31.glVertexAttribPointer(glPosition,FLOATS_PER_VERTEX, GLES31.GL_FLOAT, false, BYTES_PER_FLOAT*FLOATS_PER_VERTEX, 0);
+        GLES31.glVertexAttribPointer(glPosition, 3, GLES31.GL_FLOAT, false, BYTES_PER_FLOAT*FLOATS_PER_VERTEX, 0);
+        GLES31.glEnableVertexAttribArray(glTexCoord);
+        GLES31.glVertexAttribPointer(glTexCoord,2, GLES31.GL_FLOAT, false, BYTES_PER_FLOAT*FLOATS_PER_VERTEX, 3*BYTES_PER_FLOAT);
     }
-
     private FloatBuffer convertToFloatBuffer(float[] data){
         ByteBuffer bufferDataByte = ByteBuffer.allocateDirect(data.length*BYTES_PER_FLOAT).order(ByteOrder.nativeOrder());
         FloatBuffer bufferData = bufferDataByte.asFloatBuffer();
@@ -127,12 +140,59 @@ public class OpenGLRenderer implements GLSurfaceView.Renderer {
     public void onSurfaceChanged(GL10 gl10, int i, int i1) {
         Log.e(TAG, "RENDERER: Changed");
         GLES31.glViewport(0, 0, i, i1);
-    }
+        screenAspect = i/(float)i1;
+        edgeX = 1.0f;
+        edgeY = 1.0f;
 
+        if (videoAspect > screenAspect) {
+            // Video is wider than screen (letterbox)
+            edgeY = screenAspect / videoAspect;
+        } else {
+            // Video is taller than screen (pillarbox)
+            edgeX = videoAspect / screenAspect;
+        }
+        fvVerticesData[0] = edgeX;
+        fvVerticesData[5] = edgeX;
+        fvVerticesData[10] = -edgeX;
+        fvVerticesData[15] = -edgeX;
+
+        fvVerticesData[1] = edgeY;
+        fvVerticesData[6] = -edgeY;
+        fvVerticesData[11] = -edgeY;
+        fvVerticesData[16] = edgeY;
+        changeAspect = true;
+    }
+    @Override
+    public void getVideoDim(int width, int height) {
+        videoAspect = width/(float)height;
+        edgeX = 1.0f;
+        edgeY = 1.0f;
+
+        if (videoAspect > screenAspect) {
+            // Video is wider than screen (letterbox)
+            edgeY = screenAspect / videoAspect;
+        } else {
+            // Video is taller than screen (pillarbox)
+            edgeX = videoAspect / screenAspect;
+        }
+        fvVerticesData[0] = edgeX;
+        fvVerticesData[5] = edgeX;
+        fvVerticesData[10] = -edgeX;
+        fvVerticesData[15] = -edgeX;
+
+        fvVerticesData[1] = edgeY;
+        fvVerticesData[6] = -edgeY;
+        fvVerticesData[11] = -edgeY;
+        fvVerticesData[16] = edgeY;
+        changeAspect = true;
+    }
     @Override
     public void onDrawFrame(GL10 gl10) {
         GLES31.glUseProgram(glProgram);
-
+        if(changeAspect){
+            updateVertexArray();
+            changeAspect = false;
+        }
         if (surfaceTexture != null) {
             surfaceTexture.updateTexImage();
         }
