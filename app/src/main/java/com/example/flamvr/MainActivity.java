@@ -1,110 +1,100 @@
 package com.example.flamvr;
 
-import android.app.Activity;
-import android.content.Intent;
-import android.net.Uri;
+
 import android.opengl.GLSurfaceView;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Surface;
-import android.widget.Button;
-import android.widget.FrameLayout;
+import android.view.View;
 
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.flamvr.core.IOInterface;
 import com.example.flamvr.core.MediaCodecPlayer;
+import com.example.flamvr.core.StateHandler;
 import com.example.flamvr.databinding.ActivityMainBinding;
+import com.example.flamvr.input.InputController;
 import com.example.flamvr.platform.opengl.OpenGLRenderer;
+import com.example.flamvr.ui.UIHandler;
 
 
 public class MainActivity extends AppCompatActivity {
     private static final String TAG = MainActivity.class.getSimpleName();
     private GLSurfaceView glSurfaceView;
     private OpenGLRenderer renderer;
-    private MediaCodecPlayer player;
+    private MediaCodecPlayer mediaCodecPlayer;
+    private InputController inputController;
+    private StateHandler stateHandler;
+    private IOInterface ioInterface;
+    private UIHandler uiHandler;
     private boolean surfaceReady = false;
-    private Uri pendingUri;
+
     private ActivityMainBinding binding;
-    private ActivityResultLauncher<Intent> pickVideoLauncher;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        //setting up full screen render
+        View decorView = getWindow().getDecorView();
+        decorView.setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                        | View.SYSTEM_UI_FLAG_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        );
+        //setting up input bindings
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
+        //setting up OpenGL context and renderer
         glSurfaceView = findViewById(R.id.surfaceView);
         glSurfaceView.setEGLContextClientVersion(3); // OpenGL ES 3.1
         renderer = new OpenGLRenderer(this);
         glSurfaceView.setRenderer(renderer);
         glSurfaceView.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
 
-        FrameLayout root = findViewById(R.id.root);
+        //setting up UIHandler
+        uiHandler = new UIHandler(this);
 
-        setupActivityResultLauncher();
+        //setting up stateManager
+        stateHandler = new StateHandler();
+        stateHandler.addListener(uiHandler);
+        stateHandler.addStream(uiHandler);
+        //setting up IOInterface
+        ioInterface = new IOInterface(this, stateHandler);
+        stateHandler.addListener(ioInterface);
+
+        //setting up input controller
+        inputController = new InputController(binding, stateHandler);
+
+
         Log.e(TAG, "Activity created");
-        Button pickButton = new Button(this);
-        pickButton.setText("Pick Video");
-        pickButton.setOnClickListener(v -> openFilePicker());
-
-        addContentView(pickButton, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT));
 
         //listen to surface creation callbacks
         renderer.setOnSurfaceReadyCallback(this::onSurfaceReady);
     }
 
-    private void openFilePicker() {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.setType("video/*");
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        pickVideoLauncher.launch(intent);
-    }
-
-    private void setupActivityResultLauncher() {
-        pickVideoLauncher = registerForActivityResult(
-                new ActivityResultContracts.StartActivityForResult(),
-                result -> {
-                    if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
-                        Uri videoUri = result.getData().getData();
-                        if (videoUri != null) {
-                            getContentResolver().takePersistableUriPermission(
-                                    videoUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-
-                            if (surfaceReady) {
-                                player.start(videoUri);
-                            } else {
-                                pendingUri = videoUri;
-                            }
-                        }
-                    }
-                }
-        );
-    }
     public void onSurfaceReady(Surface surface) {
-        if(player == null){
-            player = new MediaCodecPlayer(this, surface);
+        if(mediaCodecPlayer == null){
+            mediaCodecPlayer = new MediaCodecPlayer(this, surface);
+            stateHandler.addListener(mediaCodecPlayer);
+            mediaCodecPlayer.addStream(stateHandler);
+            mediaCodecPlayer.addStream(uiHandler);
+            mediaCodecPlayer.addStream(renderer);
         } else {
-            player.UpdateSurface(surface);
+            mediaCodecPlayer.UpdateSurface(surface);
         }
         Log.e(TAG,"SURFACE CREATED!!!!!!!!!!!!");
         surfaceReady = true;
-        if (pendingUri != null) {
-            player.start(pendingUri);
-            pendingUri = null;
-        }
     }
     @Override
     protected void onPause() {
         Log.e(TAG, "Activity Paused");
         if (glSurfaceView != null) {
             glSurfaceView.onPause();
-        }
-        if (player != null) {
-            player.stop();
         }
         surfaceReady = false;
         super.onPause();
@@ -123,8 +113,8 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         Log.e(TAG, "Activity DESTROYED");
         super.onDestroy();
-        if (player != null) {
-            player.stop();
+        if (mediaCodecPlayer != null) {
+            mediaCodecPlayer.stop();
         }
     }
 }
