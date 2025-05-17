@@ -1,6 +1,9 @@
 package com.example.flamvr.core;
 
 import android.content.Context;
+import android.media.AudioFormat;
+import android.media.AudioManager;
+import android.media.AudioTrack;
 import android.media.MediaCodec;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
@@ -19,7 +22,9 @@ public class MediaCodecPlayer implements VideoPlaybackContract {
     private final Context ctx;
     private MediaExtractor videoExtractor;
     private MediaExtractor audioExtractor;
-    private MediaCodec decoder;
+    private MediaCodec videoDecoder;
+    private MediaCodec audioDecoder;
+    private AudioTrack audioTrack;
     private Thread decodeThread;
     private boolean decoderReady = false;
     private boolean isPlaying;
@@ -95,9 +100,22 @@ public class MediaCodecPlayer implements VideoPlaybackContract {
                     return;
                 }
 
-                decoder = MediaCodec.createDecoderByType(mime);
-                decoder.configure(videoTrackFormat, surface, null, 0);
-                decoder.start();
+                videoDecoder = MediaCodec.createDecoderByType(mime);
+                videoDecoder.configure(videoTrackFormat, surface, null, 0);
+                videoDecoder.start();
+
+                audioDecoder = MediaCodec.createDecoderByType(audioTrackFormat.getString(MediaFormat.KEY_MIME));
+                audioDecoder.configure(audioTrackFormat, null, null, 0);
+                audioDecoder.start();
+                int sampleRate = audioTrackFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE);
+                int channelCount = audioTrackFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
+                int channelConfig = channelCount == 1 ? AudioFormat.CHANNEL_OUT_MONO : AudioFormat.CHANNEL_OUT_STEREO;
+
+                int bufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, AudioFormat.ENCODING_PCM_16BIT);
+                audioTrack = new AudioTrack(AudioManager.STREAM_MUSIC, sampleRate, channelConfig,
+                        AudioFormat.ENCODING_PCM_16BIT, bufferSize, AudioTrack.MODE_STREAM);
+                audioTrack.play();
+
                 decoderReady = true;
                 decodeLoop();
             } catch (Exception e) {
@@ -109,8 +127,10 @@ public class MediaCodecPlayer implements VideoPlaybackContract {
     }
 
     private void decodeLoop() {
-        MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
-        boolean isEOS = false;
+        MediaCodec.BufferInfo videoInfo = new MediaCodec.BufferInfo();
+        MediaCodec.BufferInfo audioInfo = new MediaCodec.BufferInfo();
+        boolean videoEOS = false;
+        boolean audioEOS = false;
         long playbackStartTimeNs = -1;
         while (true) {
             if (!isPlaying) {
@@ -124,33 +144,64 @@ public class MediaCodecPlayer implements VideoPlaybackContract {
             }
             if(performSeek){
                 videoExtractor.seekTo(seekToProgress*totalDurationMs * 10L, MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
+                audioExtractor.seekTo(seekToProgress*totalDurationMs * 10L, MediaExtractor.SEEK_TO_PREVIOUS_SYNC);
                 playbackStartTimeNs = -1;
-                decoder.flush();
+                videoDecoder.flush();
+                audioDecoder.flush();
                 performSeek = false;
             }
-            if (!isEOS) {
-                int inIndex = decoder.dequeueInputBuffer(10000);
+            // Feed audio input
+            if (!audioEOS) {
+                int inIndex = audioDecoder.dequeueInputBuffer(10000);
                 if (inIndex >= 0) {
-                    ByteBuffer buffer = decoder.getInputBuffer(inIndex);
+                    ByteBuffer buffer = audioDecoder.getInputBuffer(inIndex);
+                    assert buffer != null;
+                    int size = audioExtractor.readSampleData(buffer, 0);
+                    if (size < 0) {
+                        audioDecoder.queueInputBuffer(inIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                        audioEOS = true;
+                    } else {
+                        long pts = audioExtractor.getSampleTime();
+                        audioDecoder.queueInputBuffer(inIndex, 0, size, pts, 0);
+                        audioExtractor.advance();
+                    }
+                }
+            }
+            // Feed video input
+            if (!videoEOS) {
+                int inIndex = videoDecoder.dequeueInputBuffer(10000);
+                if (inIndex >= 0) {
+                    ByteBuffer buffer = videoDecoder.getInputBuffer(inIndex);
                     assert buffer != null;
                     int sampleSize = videoExtractor.readSampleData(buffer, 0);
 
                     if (sampleSize < 0) {
-                        decoder.queueInputBuffer(inIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
-                        isEOS = true;
+                        videoDecoder.queueInputBuffer(inIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
+                        videoEOS = true;
                     } else {
                         long pts = videoExtractor.getSampleTime();
                         progressBarStream.updateSeekBarProgress(pts/1000);
                         progressBarStream.updateFrameCount(pts * frameRate / 1_000_000L);
-                        decoder.queueInputBuffer(inIndex, 0, sampleSize, pts, 0);
+                        videoDecoder.queueInputBuffer(inIndex, 0, sampleSize, pts, 0);
                         videoExtractor.advance();
                     }
                 }
             }
+            // Handle audio output
+            int audioOutIndex = audioDecoder.dequeueOutputBuffer(audioInfo, 10000);
+            if (audioOutIndex >= 0) {
+                ByteBuffer outBuffer = audioDecoder.getOutputBuffer(audioOutIndex);
+                byte[] audioData = new byte[audioInfo.size];
+                outBuffer.get(audioData);
+                outBuffer.clear();
+                audioTrack.write(audioData, 0, audioData.length);
+                audioDecoder.releaseOutputBuffer(audioOutIndex, false);
+            }
 
-            int outIndex = decoder.dequeueOutputBuffer(info, 10000);
-            if (outIndex >= 0) {
-                long presentationTimeUs = info.presentationTimeUs;
+            // Handle video output
+            int videoOutIndex = videoDecoder.dequeueOutputBuffer(videoInfo, 10000);
+            if (videoOutIndex >= 0) {
+                long presentationTimeUs = videoInfo.presentationTimeUs;
                 if (playbackStartTimeNs < 0) {
                     playbackStartTimeNs = System.nanoTime() - presentationTimeUs * 1000;
                 }
@@ -167,22 +218,31 @@ public class MediaCodecPlayer implements VideoPlaybackContract {
                     }
                 }
 
-                decoder.releaseOutputBuffer(outIndex, true);
+                videoDecoder.releaseOutputBuffer(videoOutIndex, true);
             }
 
-            if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+            if ((videoInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
                 Log.d("MediaCodecPlayer", "End of stream");
                 break;
             }
         }
-        if (decoder != null) {
-            decoder.stop();
-            decoder.release();
-            decoder = null;
+        if (videoDecoder != null) {
+            videoDecoder.stop();
+            videoDecoder.release();
+            videoDecoder = null;
         }
         if (videoExtractor != null) {
             videoExtractor.release();
             videoExtractor = null;
+        }
+        if (audioDecoder != null) {
+            audioDecoder.stop();
+            audioDecoder.release();
+            audioDecoder = null;
+        }
+        if (audioExtractor != null) {
+            audioExtractor.release();
+            audioExtractor = null;
         }
         decoderReady = false;
         decodeThread = null;
