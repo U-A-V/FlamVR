@@ -19,14 +19,24 @@ import java.nio.ShortBuffer;
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
+
+/**
+ * OpenGLRenderer handles rendering video frames using OpenGL ES 3.1.
+ * It supports different shader filters and manages video aspect ratio.
+ */
 public class OpenGLRenderer implements GLSurfaceView.Renderer, StreamDataInterface.VideoInfoStream {
+
+    // Shader utility class for compiling shaders and creating programs
     OpenGLShader GLShader;
     private long startTime;
+
     public OpenGLRenderer(Context ctx){
         GLShader = new OpenGLShader(ctx);
         startTime = System.nanoTime();
     }
     private static final String TAG = OpenGLRenderer.class.getSimpleName();
+
+    // Constants for byte size of data types
     static final int BYTES_PER_FLOAT = 4;
     static final int BYTES_PER_SHORT = 2;
     static final int FLOATS_PER_VERTEX = 5;
@@ -34,50 +44,93 @@ public class OpenGLRenderer implements GLSurfaceView.Renderer, StreamDataInterfa
     static float edgeY = 1.0f;
     static float screenAspect = 1.0f;
     static float videoAspect = 1.0f;
+
+    // Vertex data array (4 vertices with 3 position + 2 texture coords each
     float[] fvVerticesData = new float[]{
             edgeX, edgeY, 0.0f, 1.0f, 0.0f,
             edgeX, -edgeY, 0.0f, 1.0f, 1.0f,
             -edgeX, -edgeY, 0.0f, 0.0f, 1.0f,
             -edgeX, edgeY, 0.0f, 0.0f, 0.0f,
     };
+
+    // Indices for two triangles forming the rectangle
     short[] svIndexData = new short[]{
             0, 1, 2,
             2, 3, 0
     };
+
+    // One OpenGL program per filter type
     private int[] glProgram = new int[FILTERS.values().length];
+
+    // OpenGL handles for Vertex Array Object, Vertex Buffer Object, Element Buffer Object
     private int glVAO, glVBO, glEBO;
+
+    // SurfaceTexture and Surface for external texture rendering
     private SurfaceTexture surfaceTexture;
     private Surface surface;
+
+    // Texture ID and uniform/attribute handles
     private int textureId;
     private int textureHandle;
+
+    // Callback interface to notify when Surface is ready
     private OnSurfaceReadyCallback surfaceReadyCallback;
+
+    // Matrix to hold texture transform for proper video orientation
     private final float[] transformMatrix = new float[16];
+
+    // Flags to trigger updates on aspect ratio or filter change
     private int transformMatrixHandle;
     private boolean changeAspect = false;
     private boolean changeFilter = false;
+
+    // Current filter ID from FILTERS enum
     private int filterID = FILTERS.NONE.ordinal();
+
+    // Attribute locations for shader inputs
     static int glPosition;
     static int glTexCoord;
+
+    /**
+     * Interface for callback when the Surface is ready.
+     */
     public interface OnSurfaceReadyCallback {
         void onSurfaceReady(Surface surface);
     }
+
+    /**
+     * Set the callback to be notified when the Surface is ready.
+     */
 
     public void setOnSurfaceReadyCallback(OnSurfaceReadyCallback callback) {
         this.surfaceReadyCallback = callback;
     }
 
+    /**
+     * Returns the SurfaceTexture used to update video frames.
+     */
     public SurfaceTexture getSurfaceTexture() {
         return surfaceTexture;
     }
+
+    /**
+     * Called once when the surface is created. Initializes GL objects and shaders.
+     */
     @Override
     public void onSurfaceCreated(GL10 gl10, EGLConfig eglConfig) {
         Log.e(TAG, "RENDERER: CREATED");
+        // Create an external texture for video frames
         textureId = createExternalTexture();
+
+        // Create SurfaceTexture from texture ID for receiving frames from MediaCodec
         surfaceTexture = new SurfaceTexture(textureId);
         surfaceTexture.setDefaultBufferSize(1920, 1080); // can adjust later
 
+        // Create Surface from SurfaceTexture to pass to MediaCodec or other producers
         surface = new Surface(surfaceTexture);
 
+
+        // Notify listener surface is ready to be used
         if (surfaceReadyCallback != null) {
             surfaceReadyCallback.onSurfaceReady(surface);
         }
@@ -113,6 +166,10 @@ public class OpenGLRenderer implements GLSurfaceView.Renderer, StreamDataInterfa
         glEBO = tmp[1];
         updateVertexArray();
     }
+
+    /**
+     * Bind shader program and set attribute/uniform locations for current filter.
+     */
     private void SetFilter(int filterID){
         GLES31.glUseProgram(glProgram[filterID]);
         glPosition = GLES31.glGetAttribLocation(glProgram[filterID], "aPosition");
@@ -121,6 +178,10 @@ public class OpenGLRenderer implements GLSurfaceView.Renderer, StreamDataInterfa
         transformMatrixHandle = GLES31.glGetUniformLocation(glProgram[filterID], "uTransform");
         GLES31.glUniform1i(textureHandle, 0); // bind texture unit 0
     }
+
+    /**
+     * Uploads vertex and index data to GPU buffers and sets vertex attribute pointers.
+     */
     private void updateVertexArray(){
         //bind VAO
         GLES31.glBindVertexArray(glVAO);
@@ -136,18 +197,31 @@ public class OpenGLRenderer implements GLSurfaceView.Renderer, StreamDataInterfa
         GLES31.glEnableVertexAttribArray(glTexCoord);
         GLES31.glVertexAttribPointer(glTexCoord,2, GLES31.GL_FLOAT, false, BYTES_PER_FLOAT*FLOATS_PER_VERTEX, 3*BYTES_PER_FLOAT);
     }
+
+    /**
+     * Utility to convert float array to FloatBuffer for OpenGL.
+     */
     private FloatBuffer convertToFloatBuffer(float[] data){
         ByteBuffer bufferDataByte = ByteBuffer.allocateDirect(data.length*BYTES_PER_FLOAT).order(ByteOrder.nativeOrder());
         FloatBuffer bufferData = bufferDataByte.asFloatBuffer();
         bufferData.put(data).position(0);
         return bufferData;
     }
+
+    /**
+     * Utility to convert short array to ShortBuffer for OpenGL.
+     */
     private ShortBuffer convertToShortBuffer(short[] data){
         ByteBuffer bufferDataByte = ByteBuffer.allocateDirect(data.length*BYTES_PER_SHORT).order(ByteOrder.nativeOrder());
         ShortBuffer bufferData = bufferDataByte.asShortBuffer();
         bufferData.put(data).position(0);
         return bufferData;
     }
+
+    /**
+     * Called on surface size or orientation changes.
+     * Adjusts viewport and vertex coordinates for proper aspect ratio.
+     */
     @Override
     public void onSurfaceChanged(GL10 gl10, int i, int i1) {
         Log.e(TAG, "RENDERER: Changed");
@@ -174,6 +248,9 @@ public class OpenGLRenderer implements GLSurfaceView.Renderer, StreamDataInterfa
         fvVerticesData[16] = edgeY;
         changeAspect = true;
     }
+    /**
+     * Receives video dimensions from stream and recalculates vertex coordinates accordingly.
+     */
     @Override
     public void getVideoDim(int width, int height) {
         videoAspect = width/(float)height;
@@ -199,12 +276,18 @@ public class OpenGLRenderer implements GLSurfaceView.Renderer, StreamDataInterfa
         changeAspect = true;
     }
 
+    /**
+     * Receives filter id from stream and assign it to program.
+     */
     @Override
     public void getFilter(int id) {
         filterID = id;
         changeFilter = true;
     }
 
+    /**
+     * called every frame to draw
+     */
     @Override
     public void onDrawFrame(GL10 gl10) {
         GLES31.glUseProgram(glProgram[filterID]);
@@ -227,6 +310,10 @@ public class OpenGLRenderer implements GLSurfaceView.Renderer, StreamDataInterfa
         GLES31.glBindVertexArray(glVAO);
         GLES31.glDrawElements(GLES31.GL_TRIANGLES,svIndexData.length, GLES31.GL_UNSIGNED_SHORT,0);
     }
+
+    /**
+     * creates external texture for surface
+     */
     private int createExternalTexture() {
         int[] textures = new int[1];
         GLES31.glGenTextures(1, textures, 0);
