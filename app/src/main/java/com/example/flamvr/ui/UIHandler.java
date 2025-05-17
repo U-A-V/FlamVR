@@ -3,9 +3,12 @@ package com.example.flamvr.ui;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
+import android.widget.ArrayAdapter;
 import android.widget.ImageButton;
 import android.widget.SeekBar;
+import android.widget.Spinner;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -15,13 +18,13 @@ import com.example.flamvr.globals.VideoPlaybackContract;
 
 
 public class UIHandler implements VideoPlaybackContract, StreamDataInterface.ProgressBarStream {
-
     private final AppCompatActivity activity;
     private final SeekBar seekBar;
     private final ImageButton btnPlayPause;
-    private TextView tvTotal;
-    private TextView tvCurrent;
-    private TextView tvFrameCount;
+    private final TextView tvTotal;
+    private final TextView tvCurrent;
+    private final TextView tvFrameCount;
+    private final Spinner spPlaybackControl;
     private long totalDurationMs = 0;
     private long progress = 0;
     private long frameCount = 0;
@@ -42,6 +45,17 @@ public class UIHandler implements VideoPlaybackContract, StreamDataInterface.Pro
         tvTotal = activity.findViewById(R.id.totalDuration);
         tvCurrent = activity.findViewById(R.id.currDuration);
         tvFrameCount = activity.findViewById(R.id.frameCount);
+        spPlaybackControl = activity.findViewById(R.id.plabackControl);
+
+        String[] items = {"0.5x", "1.0x", "1.5x", "2.0x"};
+
+        // Adapter
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(
+                activity, android.R.layout.simple_spinner_item, items
+        );
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+
+        spPlaybackControl.setAdapter(adapter);
         handler.post(updateRunnable);
     }
     @Override
@@ -64,6 +78,11 @@ public class UIHandler implements VideoPlaybackContract, StreamDataInterface.Pro
     @Override
     public void onSeek(int progress) {
 
+    }
+
+    @Override
+    public void onPlaybackChanged(String speed) {
+        Toast.makeText( activity, "Selected: " + speed, Toast.LENGTH_SHORT).show();
     }
 
     @Override

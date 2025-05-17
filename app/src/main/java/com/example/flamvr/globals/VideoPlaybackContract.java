@@ -7,4 +7,5 @@ public interface VideoPlaybackContract {
     public void onPlay();
     public void onPause();
     public void onSeek(int progress);
+    void onPlaybackChanged(String speed);
 }

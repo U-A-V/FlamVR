@@ -70,8 +70,10 @@ public class StateHandler implements InputContract, StateManagerContract, Stream
     }
 
     @Override
-    public Uri getFileUri() {
-        return fileUri;
+    public void onPlaybackChanged(String speed) {
+        for (int i = 0; i < totalVPListeners; i++){
+            videoPlayBackListeners[i].onPlaybackChanged(speed);
+        }
     }
 
     @Override

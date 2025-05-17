@@ -1,6 +1,9 @@
 package com.example.flamvr.input;
 
+import android.view.View;
+import android.widget.AdapterView;
 import android.widget.SeekBar;
+import android.widget.Toast;
 
 import com.example.flamvr.globals.InputContract;
 import com.example.flamvr.databinding.ActivityMainBinding;
@@ -29,6 +32,18 @@ public class InputController {
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+        binding.plabackControl.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                String selected = parent.getItemAtPosition(position).toString();
+                listener.onPlaybackChanged(selected);
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+                listener.onPlaybackChanged("1.0x");
+            }
         });
     }
 

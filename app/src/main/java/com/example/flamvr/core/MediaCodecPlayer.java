@@ -32,6 +32,8 @@ public class MediaCodecPlayer implements VideoPlaybackContract {
     private boolean performSeek = false;
     private long totalDurationMs;
     private int frameRate;
+    private long playbackStartTimeNs = -1;
+    private float playBackSpeed = 1.0f;
     private volatile boolean stopRequested = false;
     private StreamDataInterface.ProgressBarStream progressBarStream;
     private StreamDataInterface.VideoInfoStream videoInfoStream;
@@ -131,7 +133,7 @@ public class MediaCodecPlayer implements VideoPlaybackContract {
         MediaCodec.BufferInfo audioInfo = new MediaCodec.BufferInfo();
         boolean videoEOS = false;
         boolean audioEOS = false;
-        long playbackStartTimeNs = -1;
+        playbackStartTimeNs = -1;
         while (true) {
             if (!isPlaying) {
                 try {
@@ -201,7 +203,7 @@ public class MediaCodecPlayer implements VideoPlaybackContract {
             // Handle video output
             int videoOutIndex = videoDecoder.dequeueOutputBuffer(videoInfo, 10000);
             if (videoOutIndex >= 0) {
-                long presentationTimeUs = videoInfo.presentationTimeUs;
+                long presentationTimeUs = (long) (videoInfo.presentationTimeUs / playBackSpeed);
                 if (playbackStartTimeNs < 0) {
                     playbackStartTimeNs = System.nanoTime() - presentationTimeUs * 1000;
                 }
@@ -277,5 +279,27 @@ public class MediaCodecPlayer implements VideoPlaybackContract {
     public void onSeek(int progress) {
         this.seekToProgress = progress;
         this.performSeek = true;
+    }
+
+    @Override
+    public void onPlaybackChanged(String speed) {
+        switch (speed){
+            case "0.5x":
+                playBackSpeed = 0.5f;
+                break;
+            case "1.0x":
+                playBackSpeed = 1.0f;
+                break;
+                case "1.5x":
+                playBackSpeed = 1.5f;
+                break;
+            case "2.0x":
+                playBackSpeed = 2.0f;
+                break;
+            default:
+                playBackSpeed = 1.0f;
+                break;
+        }
+        playbackStartTimeNs = -1;
     }
 }

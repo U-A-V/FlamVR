@@ -46,6 +46,14 @@
             android:text="00"
             android:textSize="16sp"
             android:textColor="#FFFFFF"/>
+        <Spinner
+            android:id="@+id/plabackControl"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_marginEnd="16dp"
+            android:layout_marginBottom="128dp"
+            android:textColor="#FFFFFF"/>
         <LinearLayout
             android:id="@+id/controlsLayout"
             android:layout_width="match_parent"
