@@ -49,7 +49,7 @@ FlamVR/
 ### [Model]
 - `GLRenderer`: Displays video frames via OpenGL ES textures.
 - `MediaCodecPlayer`: Handles video and audio decoding in sync.
-### [Model-View]
+### [View-Model]
 - `StateManager`: Communicates app state to UI and codec player and renderer.
 ### [View]
 - `InputHandler`: Deals with user control.
