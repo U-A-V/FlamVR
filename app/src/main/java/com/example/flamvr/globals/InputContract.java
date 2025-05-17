@@ -6,4 +6,5 @@ public interface InputContract {
     void onPlaybackChanged(String speed);
     void onPlayPauseToggled();
     void onSeekChanged(int progress);
+    void onFilterChange(String filterId);
 }

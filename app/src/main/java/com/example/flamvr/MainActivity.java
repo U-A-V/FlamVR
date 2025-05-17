@@ -63,6 +63,8 @@ public class MainActivity extends AppCompatActivity {
         stateHandler = new StateHandler();
         stateHandler.addListener(uiHandler);
         stateHandler.addStream(uiHandler);
+        stateHandler.addStreamVS(uiHandler);
+        stateHandler.addStreamVS(renderer);
         //setting up IOInterface
         ioInterface = new IOInterface(this, stateHandler);
         stateHandler.addListener(ioInterface);
@@ -82,7 +84,6 @@ public class MainActivity extends AppCompatActivity {
             mediaCodecPlayer = new MediaCodecPlayer(this, surface);
             stateHandler.addListener(mediaCodecPlayer);
             mediaCodecPlayer.addStream(stateHandler);
-            mediaCodecPlayer.addStream(uiHandler);
             mediaCodecPlayer.addStream(renderer);
         } else {
             mediaCodecPlayer.UpdateSurface(surface);

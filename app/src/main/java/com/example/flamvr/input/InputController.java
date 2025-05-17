@@ -45,6 +45,18 @@ public class InputController {
                 listener.onPlaybackChanged("1.0x");
             }
         });
+        binding.filterSelection.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                String selected = parent.getItemAtPosition(position).toString();
+                listener.onFilterChange(selected);
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> adapterView) {
+                listener.onFilterChange("NONE");
+            }
+        });
     }
 
     public void updateSeekBarProgress(int progress) {

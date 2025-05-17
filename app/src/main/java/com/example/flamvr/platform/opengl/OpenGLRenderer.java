@@ -8,6 +8,8 @@ import android.util.Log;
 import android.view.Surface;
 import android.opengl.GLES11Ext;
 
+import com.example.flamvr.core.StateHandler;
+import com.example.flamvr.globals.FILTERS;
 import com.example.flamvr.globals.StreamDataInterface;
 
 import java.nio.ByteBuffer;
@@ -43,8 +45,8 @@ public class OpenGLRenderer implements GLSurfaceView.Renderer, StreamDataInterfa
             0, 1, 2,
             2, 3, 0
     };
-    private int glProgram;
-    private int glVAO;
+    private int[] glProgram = new int[FILTERS.values().length];
+    private int glVAO, glVBO, glEBO;
     private SurfaceTexture surfaceTexture;
     private Surface surface;
     private int textureId;
@@ -53,6 +55,8 @@ public class OpenGLRenderer implements GLSurfaceView.Renderer, StreamDataInterfa
     private final float[] transformMatrix = new float[16];
     private int transformMatrixHandle;
     private boolean changeAspect = false;
+    private boolean changeFilter = false;
+    private int filterID = FILTERS.NONE.ordinal();
     static int glPosition;
     static int glTexCoord;
     public interface OnSurfaceReadyCallback {
@@ -78,7 +82,7 @@ public class OpenGLRenderer implements GLSurfaceView.Renderer, StreamDataInterfa
         if (surfaceReadyCallback != null) {
             surfaceReadyCallback.onSurfaceReady(surface);
         }
-        GLES31.glClearColor(0.0f, 1.0f, 1.0f, 1.0f);
+        GLES31.glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         //compile vert shader
         int vertShaderID = GLShader.compileShader("simple", GLES31.GL_VERTEX_SHADER);
 
@@ -86,30 +90,39 @@ public class OpenGLRenderer implements GLSurfaceView.Renderer, StreamDataInterfa
         int fragShaderID = GLShader.compileShader("simple", GLES31.GL_FRAGMENT_SHADER);
 
         //create program and attach shaders
-        glProgram = GLShader.createProgram(vertShaderID, fragShaderID);
+        glProgram[FILTERS.NONE.ordinal()] = GLShader.createProgram(vertShaderID, fragShaderID);
 
-        //bind the program and upload vertex data
-        GLES31.glUseProgram(glProgram);
-        glPosition = GLES31.glGetAttribLocation(glProgram, "aPosition");
-        glTexCoord = GLES31.glGetAttribLocation(glProgram, "aTexCoord");
-        textureHandle = GLES31.glGetUniformLocation(glProgram, "uTexture");
-        transformMatrixHandle = GLES31.glGetUniformLocation(glProgram, "uTransform");
+        fragShaderID = GLShader.compileShader("Luminance", GLES31.GL_FRAGMENT_SHADER);
+        glProgram[FILTERS.FILTER1.ordinal()] = GLShader.createProgram(vertShaderID, fragShaderID);
 
-        GLES31.glUniform1i(textureHandle, 0); // bind texture unit 0
+        fragShaderID = GLShader.compileShader("Dither", GLES31.GL_FRAGMENT_SHADER);
+        glProgram[FILTERS.FILTER2.ordinal()] = GLShader.createProgram(vertShaderID, fragShaderID);
+
+        fragShaderID = GLShader.compileShader("Sketch", GLES31.GL_FRAGMENT_SHADER);
+        glProgram[FILTERS.FILTER3.ordinal()] = GLShader.createProgram(vertShaderID, fragShaderID);
+
+        //bind the program with default filter
+        SetFilter(filterID);
 
         // gen VAO
-        int[] tmp = new int[1];
+        int[] tmp = new int[2];
         GLES31.glGenVertexArrays(1, tmp, 0);
         glVAO = tmp[0];
+        //gen VBO
+        GLES31.glGenBuffers(2, tmp, 0);
+        glVBO = tmp[0];
+        glEBO = tmp[1];
         updateVertexArray();
     }
+    private void SetFilter(int filterID){
+        GLES31.glUseProgram(glProgram[filterID]);
+        glPosition = GLES31.glGetAttribLocation(glProgram[filterID], "aPosition");
+        glTexCoord = GLES31.glGetAttribLocation(glProgram[filterID], "aTexCoord");
+        textureHandle = GLES31.glGetUniformLocation(glProgram[filterID], "uTexture");
+        transformMatrixHandle = GLES31.glGetUniformLocation(glProgram[filterID], "uTransform");
+        GLES31.glUniform1i(textureHandle, 0); // bind texture unit 0
+    }
     private void updateVertexArray(){
-        //gen VBO
-        int[] tmp = new int[2];
-        GLES31.glGenBuffers(2, tmp, 0);
-        int glVBO = tmp[0];
-        int glEBO = tmp[1];
-
         //bind VAO
         GLES31.glBindVertexArray(glVAO);
 
@@ -186,12 +199,21 @@ public class OpenGLRenderer implements GLSurfaceView.Renderer, StreamDataInterfa
         fvVerticesData[16] = edgeY;
         changeAspect = true;
     }
+
+    @Override
+    public void getFilter(int id) {
+        filterID = id;
+        changeFilter = true;
+    }
+
     @Override
     public void onDrawFrame(GL10 gl10) {
-        GLES31.glUseProgram(glProgram);
-        if(changeAspect){
+        GLES31.glUseProgram(glProgram[filterID]);
+        if(changeAspect || changeFilter){
+            SetFilter(filterID);
             updateVertexArray();
             changeAspect = false;
+            changeFilter = false;
         }
         if (surfaceTexture != null) {
             surfaceTexture.updateTexImage();

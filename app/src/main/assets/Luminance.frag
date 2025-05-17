@@ -8,4 +8,5 @@ out vec4 outColor;
 uniform samplerExternalOES uTexture;
 void main(){
     outColor = texture(uTexture, vTexCoord);
+    outColor = vec4(vec3(0.2126*outColor.x + 0.7152*outColor.y + 0.0722*outColor.z), 1.0);
 }

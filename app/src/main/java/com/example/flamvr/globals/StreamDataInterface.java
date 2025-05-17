@@ -10,5 +10,6 @@ public class StreamDataInterface {
 
     public interface VideoInfoStream{
         void getVideoDim(int width, int height);
+        void getFilter(int id);
     }
 }

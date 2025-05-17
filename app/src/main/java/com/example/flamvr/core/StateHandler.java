@@ -2,6 +2,7 @@ package com.example.flamvr.core;
 
 import android.net.Uri;
 
+import com.example.flamvr.globals.FILTERS;
 import com.example.flamvr.globals.IOInterfaceContract;
 import com.example.flamvr.globals.InputContract;
 import com.example.flamvr.globals.StateManagerContract;
@@ -27,14 +28,17 @@ public class StateHandler implements InputContract, StateManagerContract, Stream
     }
 
     public enum HANDLERS{
-        UI_HANDLER, MEDIA_CODEC_HANDLER
-    }
-    public enum FILTERS{
-        NONE, FILTER1, FILTER2, FILTER3
+        UI_HANDLER, MEDIA_CODEC_HANDLER, IO_HANDLER, OPENGL_HANDLER
     }
     private final VideoPlaybackContract[] videoPlayBackListeners = new VideoPlaybackContract[HANDLERS.values().length];
     private IOInterfaceContract ioInterfaceListener = null;
     private int totalVPListeners = 0;
+    private StreamDataInterface.VideoInfoStream[] videoInfoStream = new StreamDataInterface.VideoInfoStream[HANDLERS.values().length];
+    private int totalVSListeners = 0;
+
+    public void addStreamVS(StreamDataInterface.VideoInfoStream listener){
+        videoInfoStream[totalVSListeners++] = listener;
+    }
     public void addListener(VideoPlaybackContract listener){
         videoPlayBackListeners[totalVPListeners++] = listener;
     }
@@ -94,6 +98,30 @@ public class StateHandler implements InputContract, StateManagerContract, Stream
     public void onSeekChanged(int progress) {
         for (int i = 0; i < totalVPListeners; i++) {
             videoPlayBackListeners[i].onSeek(progress);
+        }
+    }
+
+    @Override
+    public void onFilterChange(String filterId) {
+        switch(filterId){
+            case "NONE":
+                filter = FILTERS.NONE;
+                break;
+            case "FILTER1":
+                filter = FILTERS.FILTER1;
+                break;
+            case "FILTER2":
+                filter = FILTERS.FILTER2;
+                break;
+            case "FILTER3":
+                filter = FILTERS.FILTER3;
+                break;
+                default:
+                filter = FILTERS.NONE;
+                break;
+        }
+        for (int i = 0; i < totalVSListeners; i++) {
+            videoInfoStream[i].getFilter(filter.ordinal());
         }
     }
 }

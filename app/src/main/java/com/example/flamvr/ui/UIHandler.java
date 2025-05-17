@@ -17,7 +17,7 @@ import com.example.flamvr.globals.StreamDataInterface;
 import com.example.flamvr.globals.VideoPlaybackContract;
 
 
-public class UIHandler implements VideoPlaybackContract, StreamDataInterface.ProgressBarStream {
+public class UIHandler implements VideoPlaybackContract, StreamDataInterface.ProgressBarStream, StreamDataInterface.VideoInfoStream {
     private final AppCompatActivity activity;
     private final SeekBar seekBar;
     private final ImageButton btnPlayPause;
@@ -25,6 +25,7 @@ public class UIHandler implements VideoPlaybackContract, StreamDataInterface.Pro
     private final TextView tvCurrent;
     private final TextView tvFrameCount;
     private final Spinner spPlaybackControl;
+    private final Spinner spFilterSelection;
     private long totalDurationMs = 0;
     private long progress = 0;
     private long frameCount = 0;
@@ -47,15 +48,28 @@ public class UIHandler implements VideoPlaybackContract, StreamDataInterface.Pro
         tvFrameCount = activity.findViewById(R.id.frameCount);
         spPlaybackControl = activity.findViewById(R.id.plabackControl);
 
-        String[] items = {"0.5x", "1.0x", "1.5x", "2.0x"};
+
+        String[] playBackSpeeds = {"0.5x", "1.0x", "1.5x", "2.0x"};
 
         // Adapter
         ArrayAdapter<String> adapter = new ArrayAdapter<>(
-                activity, android.R.layout.simple_spinner_item, items
+                activity, android.R.layout.simple_spinner_item, playBackSpeeds
         );
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
 
         spPlaybackControl.setAdapter(adapter);
+
+        spPlaybackControl.setSelection(adapter.getPosition("1.0x"));
+
+        spFilterSelection = activity.findViewById(R.id.filterSelection);
+
+        String[] filters = {"NONE", "FILTER1", "FILTER2", "FILTER3"};
+        // Adapter
+        ArrayAdapter<String> filterAdapter = new ArrayAdapter<>(
+                activity, android.R.layout.simple_spinner_item, filters
+        );
+        filterAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spFilterSelection.setAdapter(filterAdapter);
         handler.post(updateRunnable);
     }
     @Override
@@ -110,4 +124,13 @@ public class UIHandler implements VideoPlaybackContract, StreamDataInterface.Pro
         return String.format("%02d:%02d", minutes, seconds);
     }
 
+    @Override
+    public void getVideoDim(int width, int height) {
+
+    }
+
+    @Override
+    public void getFilter(int id) {
+        Toast.makeText( activity, "Selected: Filter " + id, Toast.LENGTH_SHORT).show();
+    }
 }
