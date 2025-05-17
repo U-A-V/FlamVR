@@ -53,7 +53,7 @@
             android:layout_gravity="bottom|end"
             android:layout_marginEnd="16dp"
             android:layout_marginBottom="128dp"
-            android:textColor="#FFFFFF"/>
+            android:background="@drawable/spinner_bg"/>
         <Spinner
             android:id="@+id/filterSelection"
             android:layout_width="wrap_content"
@@ -61,7 +61,7 @@
             android:layout_gravity="bottom|start"
             android:layout_marginStart="16dp"
             android:layout_marginBottom="128dp"
-            android:textColor="#FFFFFF"/>
+            android:background="@drawable/spinner_bg" />
         <LinearLayout
             android:id="@+id/controlsLayout"
             android:layout_width="match_parent"

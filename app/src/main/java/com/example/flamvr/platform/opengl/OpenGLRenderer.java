@@ -8,7 +8,6 @@ import android.util.Log;
 import android.view.Surface;
 import android.opengl.GLES11Ext;
 
-import com.example.flamvr.core.StateHandler;
 import com.example.flamvr.globals.FILTERS;
 import com.example.flamvr.globals.StreamDataInterface;
 
